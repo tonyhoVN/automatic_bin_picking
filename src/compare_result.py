@@ -76,7 +76,6 @@ class Robot_Scan():
         self.tf_sub              = rospy.Subscriber('/dsr01m1013/joint_states', JointState, self.callback_TF)
         self.tf_buffer           = tf2_ros.Buffer()
         self.tf_listener         = tf2_ros.TransformListener(self.tf_buffer)
-        # self.tf_pub              = rospy.Publisher('/tf', TFMessage, queue_size=10)
 
         # Setup pointcloud 
         self.pc_record = o3d.geometry.PointCloud()
@@ -113,7 +112,6 @@ class Robot_Scan():
         self.angle_x = [self.rotate_angle]            
         self.angle_y = [self.rotate_angle]
         self.ROI = 300 # size of ROI (pixel * pixel)
-        self.blank_image = np.zeros((self.ROI, self.ROI, 3), dtype=np.uint8)
 
         # transformation setup 
         self.H_B_T = np.eye(4) # transform from base to tool flage 
@@ -212,7 +210,7 @@ class Robot_Scan():
         # Record depth frame 
         self.depth_frame = rs.depth_frame(self.hole_filling_filter.process(self.depth_frame)) # apply hole filter     
         self.depth_image = np.asanyarray(self.depth_frame.get_data())
-        self.depth_image_color = cv.applyColorMap(cv.convertScaleAbs(self.depth_image, alpha=0.3), cv.COLORMAP_JET) # convert to depth map
+        self.depth_image_color = cv.applyColorMap(cv.convertScaleAbs(self.depth_image, alpha=0.2), cv.COLORMAP_JET) # convert to depth map
         
         # Get the intrinsics of the color and depth cameras
         self.depth_intrinsics = self.depth_frame.profile.as_video_stream_profile().intrinsics  
@@ -390,37 +388,11 @@ class Robot_Scan():
 
         self.pc_record.clear() # clear point cloud
 
-        # for u in range(x_mid - int(ROI/2), x_mid + int(ROI/2)):
-        #     for v in range(y_mid - int(ROI/2), y_mid + int(ROI/2)):
-                
-        #         if (u<0) or (v<0) or (u>self.width) or (v>self.height):
-        #             continue
-
-        #         # Measure coordinate of pixels in ROI compare to color camera
-        #         depth_value = self.depth_frame.get_distance(u, v) 
-
-        #         location = rs.rs2_deproject_pixel_to_point(self.depth_intrinsics, [u, v], depth_value) # meter
-        #         if location == [0. ,0. ,0.] or (location[2] > 0.5): continue 
-
-        #         # Get color of point 
-        #         colors = self.color_image[v][u] # BGR
-        #         colors_normal = [colors[2]/255. , colors[1]/255., colors[0]/255.] # Normal color to [0,1] in RGB
-
-        #         # Add color to ROI image
-        #         self.blank_image[v - (y_mid - int(ROI/2))][u - (x_mid - int(ROI/2))] = colors
-            
-        #         # Add point to point cloud 
-        #         location_final = [location[0],
-        #                           location[1],
-        #                           location[2] - self.radius/1000] # meter
-                
-        #         self.pc_record.points.append(location_final)
-        #         self.pc_record.colors.append(colors_normal)
-
         # Take the color and depth ROI
         roi_x = int(x_mid - ROI/2)
         roi_y = int(y_mid - ROI/2)
-        color_roi = self.color_image[roi_y:roi_y + ROI, roi_x:roi_x + ROI]
+        color_roi = self.color_image[roi_y:roi_y + ROI, roi_x:roi_x + ROI] # normalize [0,1]
+        color_roi = cv.cvtColor(color_roi, cv.COLOR_RGB2BGR)
         depth_roi = self.depth_image[roi_y:roi_y + ROI, roi_x:roi_x + ROI]
         
         # Convert ROI to pc 
@@ -429,6 +401,7 @@ class Robot_Scan():
             depth = o3d.geometry.Image(depth_roi.astype(np.float32)),
             convert_rgb_to_intensity = False
         )
+
         self.pc_record = o3d.geometry.PointCloud.create_from_rgbd_image(
             image_pc,
             o3d.camera.PinholeCameraIntrinsic(
@@ -459,8 +432,7 @@ class Robot_Scan():
 
         # Save image 
         cv.imwrite(path_img + "/image_view_" + str(index) + ".jpg", self.color_image)
-        cv.imwrite(path_img + "/image_test_" + str(index) + ".jpg", self.blank_image)
-        cv.imwrite(path_img + "/image_depth_" + str(index) + ".png", self.depth_image)
+        cv.imwrite(path_img + "/image_depth_" + str(index) + ".png", self.depth_image_color)
 
 
     def calculate_error(self, theta1, theta2, theta3, x_trans, y_trans, z_trans, error_mat):

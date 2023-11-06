@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+
+<launch>
+
+    <!-- Run the robot -->
+    <!-- <include file="$(find dsr_launcher)/launch/single_robot_rviz.launch">
+        <arg name="mode"    value="real"/>
+        <arg name="host"    value="192.168.2.20"/>
+    </include> -->
+
+    <!-- Run the service of multi scan-->
+    <node name="multi_scan_service" pkg="multi_scan_pose_estimation" type="move_robot_service.py" output="screen"/>
+    
+    <!-- Execute algorithm and compare with others-->
+    <node name="robot_san_matching" pkg="multi_scan_pose_estimation" type="compare_result.py" output="screen"/>
+
+</launch>

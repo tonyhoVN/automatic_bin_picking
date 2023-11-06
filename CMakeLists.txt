@@ -20,7 +20,6 @@ add_service_files(
   MergePcl.srv
   MoveMultipleView.srv
   RotateMultipleView.srv
-  GoHome.srv
 )
 
 generate_messages(

@@ -1,5 +1,5 @@
 <package format="2">
-<name>multi_scan</name>
+<name>multi_scan_pose_estimation</name>
 <version>0.0.0</version>
 <description>multi-scan pose estimation</description>
 <maintainer email="hoanhtung2000nd@gmail.com">Tony Ho</maintainer>

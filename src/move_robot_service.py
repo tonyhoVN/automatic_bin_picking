@@ -14,7 +14,7 @@ size_box = [30,20,40]
 class Move_Robot():
     def __init__(self):      
         # Setup ROS
-        rospy.init_node('dsr_simple_test')
+        rospy.init_node('multi_scan_service')
         rospy.on_shutdown(self.shutdown)
         self.pub_stop           = rospy.Publisher('/'+ROBOT_ID +ROBOT_MODEL+'/stop', RobotStop, queue_size=10)
         self.pick_object_server = rospy.Service("move_robot_service", MoveMultipleView, self.move_close_object)
@@ -82,28 +82,6 @@ class Move_Robot():
             time.sleep(1)
             
             '''
-            # Come to conner
-            conner = [size_box[0]/2, size_box[1]/2, 0.0, 0.0, 0.0, 0.0]
-            movel(conner, mod=DR_MV_MOD_REL, ref=DR_TOOL)
-            time.sleep(1)
-
-
-            conner = [0.0, -size_box[1], 0.0, 0.0, 0.0, 0.0]
-            movel(conner, mod=DR_MV_MOD_REL, ref=DR_TOOL)
-            time.sleep(1)
-
-            conner = [-size_box[0], 0.0, 0.0, 0.0, 0.0, 0.0]
-            movel(conner, mod=DR_MV_MOD_REL, ref=DR_TOOL)
-            time.sleep(1)
-
-            conner = [0.0, size_box[1], 0.0, 0.0, 0.0, 0.0]
-            movel(conner, mod=DR_MV_MOD_REL, ref=DR_TOOL)
-            time.sleep(1)
-
-            # pos_ee,sol = get_current_posx(ref=DR_BASE)
-            # target3 = np.array(pos_ee) + np.array([32.5, -51, -(req.radius - 50), 0, 0, 0])
-            # movel(target3.tolist(), mod=DR_MV_MOD_ABS)
-
             # Close gripper
             set_digital_output(1,1)
             time.sleep(0.5)

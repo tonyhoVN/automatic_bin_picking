@@ -150,7 +150,11 @@ def post_process(source, voxel_size, remove_outlier : bool = True):
     index = []
     size = 0.06
     for i in range(len(source.points)):
-        if source.points[i][0] < size and source.points[i][0] > -size and source.points[i][1] < size and source.points[i][1] > -size: 
+        if source.points[i][0] < size \
+            and source.points[i][0] > -size \
+            and source.points[i][1] < size \
+            and source.points[i][1] > -size \
+            and source.points[i][2] < 0.1: 
             index.append(i)
     source = source.select_by_index(index)
 
@@ -334,6 +338,10 @@ def single_view_matching(rotate_angle_x: list, rotate_angle_y: list):
 
 
 def combine_matching(rotate_angle_x: list, rotate_angle_y: list):
+    # Load the top view
+    top  = o3d.io.read_point_cloud(path + "/" + "pcl_view_0.pcd")
+    top = post_process(top, voxel_size, False)
+    
     # Reconstruct scene 
     scene = reconstruct_scene([rotate_angle_x[0]],[rotate_angle_y[0]])
 
@@ -346,7 +354,7 @@ def combine_matching(rotate_angle_x: list, rotate_angle_y: list):
     transformation = fast_global_registration(source = sample, target = scene)
 
      # Refine by single view 
-    final_trans, final_score = point_to_plane_icp(sample, scene, 0.005, transformation, 60)
+    final_trans, final_score = point_to_plane_icp(sample, top, 0.01, transformation, 100)
 
     end_time = time.time()
     elapsed_time = end_time - start_time
@@ -356,7 +364,7 @@ def combine_matching(rotate_angle_x: list, rotate_angle_y: list):
     sample.transform(final_trans)
 
     # Visualize matching result
-    # o3d.visualization.draw_geometries([scene,sample])
+    o3d.visualization.draw_geometries([top,sample])
 
     # Calculate ZYZ euler angle of transformation
     theta1,theta2,theta3 = rot_to_zyz(np.asarray(final_trans)) # degree
@@ -365,5 +373,3 @@ def combine_matching(rotate_angle_x: list, rotate_angle_y: list):
     [x_trans, y_trans, z_trans] = [final_trans[0][3]*1000, final_trans[1][3]*1000, final_trans[2][3]*1000] # milimeter
     
     return theta1, theta2, theta3, x_trans, y_trans, z_trans, final_trans[:3,:3] 
-
-# print(combine_matching([40],[40]))
