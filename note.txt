@@ -6,7 +6,7 @@ roslaunch dsr_launcher dsr_moveit.launch mode:=real host:=192.168.2.20
 # Change network
 route -n
 sudo ifmetric wlx588694f57751 50
-
+ok
 
 # publish pointcloud from camera 
 rosrun bin_picking pcl_publish
