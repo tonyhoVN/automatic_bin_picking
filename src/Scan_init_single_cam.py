@@ -101,6 +101,8 @@ def rot_to_zyz(matrix):
     return theta1, theta2, theta3
 
 
+#### Moving Functions ####
+
 def rot_cam_y(radius: float, angle: float, action : int):
     '''
     Rotate camera 30 degree in y axis
