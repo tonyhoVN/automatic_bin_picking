@@ -7,7 +7,7 @@ import os,sys
 sys.dont_write_bytecode = True
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
-from Scan_init_single_cam import *
+from Robot_Setup import *
 
 # Count to drop some first framse 
 count = 0
@@ -154,6 +154,13 @@ if __name__ == "__main__":
             current_pos,_ = get_current_posx()
             E1_B = current_pos[:3]
 
+            # Map point in deptp cam coordinate to tool-flage coordinate 
+            point_tool = [point_cam_mm[0] + H_T_C[0][3],
+                          point_cam_mm[1] + H_T_C[1][3],
+                          point_cam_mm[2] + H_T_C[2][3]] # mm
+            
+            movel([point_tool[0], point_tool[1], point_tool[2] - Z_T_E-2, 0, 0, 0], mod=DR_MV_MOD_REL, ref=DR_TOOL)
+
         # Reset flag
         FLAG = 0  
 
@@ -202,8 +209,8 @@ if __name__ == "__main__":
         # Save the position of reference object
         if chr(key) == 'f':
             current,_ = get_current_posx()
-            print([current[0], current[1], current[2]])
-            file.writelines('\t'.join(map(str, [current[0], current[1], current[2]])))
+            print([current[0], current[1], current[2] - Z_T_E])
+            file.writelines('\t'.join(map(str, [current[0], current[1], current[2]- Z_T_E])))
 
         # Incremental
         if chr(key) == '1':

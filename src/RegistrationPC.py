@@ -6,17 +6,17 @@ import os,sys, time
 from scipy.spatial.transform import Rotation as R
 from math import sqrt
 
-
+# Setup path
 sys.dont_write_bytecode = True
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 path = os.path.abspath(os.path.join(os.path.dirname(__file__),"../data_pcl"))
 sys.path.append(path)
 
+
 def rot_to_zyz(matrix):
     rotation_matrix = matrix[:3,:3]
     r = R.from_matrix(np.array(rotation_matrix))
     theta3, theta2, theta1 = r.as_euler('zyz', degrees=True)
-    
     return theta1, theta2, theta3
 
 
@@ -32,7 +32,7 @@ def point_to_point_color(source, target, threshold, trans_init, iteration: int =
                                                           relative_fitness=1e-6,
                                                           relative_rmse=1e-6))
 
-    return np.asarray(reg_p2p.transformation), reg_p2p.fitness
+    return np.asarray(reg_p2p.transformation), reg_p2p.inlier_rmse
 
 
 def point_to_point_icp(source, target, threshold, trans_init, iteration: int = 60):
@@ -41,47 +41,49 @@ def point_to_point_icp(source, target, threshold, trans_init, iteration: int = 6
         o3d.pipelines.registration.TransformationEstimationPointToPoint(),
         o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration = iteration))
 
-    return np.asarray(reg_p2p.transformation), reg_p2p.fitness
+    return np.asarray(reg_p2p.transformation), reg_p2p.inlier_rmse
 
 
 def point_to_plane_icp(source, target, threshold, trans_init, iteration: int = 60):
-    source.estimate_normals(search_param = o3d.geometry.KDTreeSearchParamHybrid(radius = 0.005, max_nn = 5))
-    target.estimate_normals(search_param = o3d.geometry.KDTreeSearchParamHybrid(radius = 0.004, max_nn = 5))
+    loss = o3d.pipelines.registration.TukeyLoss(k=1.0)
+    source.estimate_normals(search_param = o3d.geometry.KDTreeSearchParamHybrid(radius = voxel_size, max_nn = 5))
+    target.estimate_normals(search_param = o3d.geometry.KDTreeSearchParamHybrid(radius = 0.005, max_nn = 5))
     reg_p2p = o3d.pipelines.registration.registration_icp(
         source, target, threshold, trans_init,
-        o3d.pipelines.registration.TransformationEstimationPointToPlane(),
+        o3d.pipelines.registration.TransformationEstimationPointToPlane(loss),
         o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration = iteration))
-    return np.asarray(reg_p2p.transformation), reg_p2p.fitness
+    return np.asarray(reg_p2p.transformation), reg_p2p.inlier_rmse
+
 
 def fast_global_registration(source,target):
-    source.estimate_normals(search_param = o3d.geometry.KDTreeSearchParamHybrid(radius = 0.005, max_nn = 5))
-    target.estimate_normals(search_param = o3d.geometry.KDTreeSearchParamHybrid(radius = 0.004, max_nn = 5))  
+    source.estimate_normals(search_param = o3d.geometry.KDTreeSearchParamHybrid(radius = voxel_size*3, max_nn = 30))
+    target.estimate_normals(search_param = o3d.geometry.KDTreeSearchParamHybrid(radius = 0.005*3, max_nn = 30))  
     
     ## Find FPFH
     source_fpfh = o3d.pipelines.registration.compute_fpfh_feature(
                     source,
-                    o3d.geometry.KDTreeSearchParamHybrid(radius=voxel_size*3, max_nn=30))
+                    o3d.geometry.KDTreeSearchParamHybrid(radius=voxel_size*5, max_nn=100))
     target_fpfh = o3d.pipelines.registration.compute_fpfh_feature(
                     target,
-                    o3d.geometry.KDTreeSearchParamHybrid(radius=voxel_size*3, max_nn=30))
+                    o3d.geometry.KDTreeSearchParamHybrid(radius=0.005*5, max_nn=100))
     
-    ## Fast global localization 
+    # Fast global localization 
     result = o3d.pipelines.registration.registration_fast_based_on_feature_matching(
                 source, target, source_fpfh, target_fpfh,
                 o3d.pipelines.registration.FastGlobalRegistrationOption(
-                maximum_correspondence_distance=0.01,
-                iteration_number = 30))
+                maximum_correspondence_distance=0.04,
+                iteration_number = 60))
 
-    ## Ransac
+    # ## Ransac
     # result = o3d.pipelines.registration.registration_ransac_based_on_feature_matching(
-    # source, target, source_fpfh, target_fpfh, True, voxel_size,
+    # source, target, source_fpfh, target_fpfh, True, 0.04,
     # o3d.pipelines.registration.TransformationEstimationPointToPoint(),3, 
     # [
-    #     o3d.pipelines.registration.CorrespondenceCheckerBasedOnEdgeLength(0.9),
+    #     o3d.pipelines.registration.CorrespondenceCheckerBasedOnEdgeLength(0.1),
     #     o3d.pipelines.registration.CorrespondenceCheckerBasedOnDistance(0.04)
     # ], o3d.pipelines.registration.RANSACConvergenceCriteria(100000, 0.999))
       
-    return  np.asarray(result.transformation)
+    return  np.asarray(result.transformation), result.fitness
 
 
 def db_scan(source):
@@ -103,6 +105,7 @@ def db_scan(source):
 
     return clutter
 
+
 def down_size(cloud, scale:float = 1 ):
     # the scaling factor for each axis
     scale_factor = [0.001*scale, 0.001*scale, 0.001*scale] 
@@ -113,6 +116,7 @@ def down_size(cloud, scale:float = 1 ):
                          [0, 0, scale_factor[2], 0],
                          [0, 0, 0, 1]])
     return cloud.transform(scaling_transform)
+
 
 def pre_transform_mesh(cloud):
     rot_transform = np.array([[-1, 0, 0, 0],
@@ -171,18 +175,18 @@ def post_process(source, voxel_size, remove_outlier : bool = True):
 
 def global_matching(source, target):
     # REGISTER MODEL and SCENE
-    best_score = 0
+    best_score = 999
     transformation = np.eye(4)
     for z_angle in range(-90,90,10):
-        for y_angle in range(-0,10,10):
+        for y_angle in range(-20,20,10):
             rot = R.from_euler('y', y_angle, degrees=True)*R.from_euler('z', z_angle, degrees=True)    
             trans_init = np.eye(4)
             trans_init[:3,:3] = rot.as_matrix()
             trans, score = point_to_plane_icp(source, target, 0.04, trans_init, 60)
-            if score >= best_score:
+            if score <= best_score:
                 transformation = trans
                 best_score = score  
-    return transformation
+    return transformation, best_score
 
 
 
@@ -237,10 +241,10 @@ def reconstruct_scene(rot_x_list:list = [], rot_y_list:list = []):
 
 
 ##### Load the sample 
-voxel_size = 0.004
+voxel_size = 0.003 # 0.004
 Sample = o3d.io.read_point_cloud(path + "/" + "component - tesselated.pcd")
 Sample = pre_transform_mesh(Sample)
-Sample = Sample.voxel_down_sample(0.005)
+Sample = Sample.voxel_down_sample(0.005) #0.005
 Sample.paint_uniform_color([0,1,0])
 
 
@@ -255,9 +259,13 @@ def multi_view_matching(rotate_angle_x: list, rotate_angle_y: list):
     # o3d.visualization.draw_geometries([scene,sample])
 
     # Global matching
-    # start_time = time.time()
+    start_time = time.time()
 
-    transformation = global_matching(source = sample, target = scene)
+    transformation,_ = global_matching(source = sample, target = scene)
+
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print(f"mathcing time: {elapsed_time} ")
 
     # Transform the sample PC
     sample.transform(transformation)
@@ -282,7 +290,7 @@ def two_view_matching(rotate_angle_x: list, rotate_angle_y: list):
     sample = copy.deepcopy(Sample)
 
     # Global matching
-    transformation = global_matching(source = sample, target = scene)
+    transformation,_ = global_matching(source = sample, target = scene)
     # transformation = fast_global_registration(source = sample, target = scene)
 
     # Transform the sample PC
@@ -308,19 +316,19 @@ def single_view_matching(rotate_angle_x: list, rotate_angle_y: list):
     sample = copy.deepcopy(Sample)
 
     # Global matching
-    # transformation = global_matching(source = sample, target = scene)
+    transformation,_ = global_matching(source = sample, target = scene)
     # transformation = fast_global_registration(source = sample, target = scene)
-    best_score = 0
-    transformation = np.eye(4)
-    for z_angle in range(-90,90,10):
-        for y_angle in range(-0,10,10):
-            rot = R.from_euler('y', y_angle, degrees=True)*R.from_euler('z', z_angle, degrees=True)    
-            trans_init = np.eye(4)
-            trans_init[:3,:3] = rot.as_matrix()
-            trans, score = point_to_point_icp(sample, scene, 0.04, trans_init, 60)
-            if score >= best_score:
-                transformation = trans
-                best_score = score  
+    # best_score = 0
+    # transformation = np.eye(4)
+    # for z_angle in range(-90,90,10):
+    #     for y_angle in range(-30,30,10):
+    #         rot = R.from_euler('y', y_angle, degrees=True)*R.from_euler('z', z_angle, degrees=True)    
+    #         trans_init = np.eye(4)
+    #         trans_init[:3,:3] = rot.as_matrix()
+    #         trans, score = point_to_point_icp(sample, scene, 0.04, trans_init, 60)
+    #         if score >= best_score:
+    #             transformation = trans
+    #             best_score = score  
 
     # Transform the sample PC
     sample.transform(transformation)
@@ -350,11 +358,13 @@ def combine_matching(rotate_angle_x: list, rotate_angle_y: list):
 
     # Global matching
     start_time = time.time()
-    # transformation = global_matching(source = sample, target = scene)
-    transformation = fast_global_registration(source = sample, target = scene)
+    transformation,_ = global_matching(source = sample, target = scene)
+    # transformation,_ = fast_global_registration(source = sample, target = scene)
+    final_trans = transformation
 
      # Refine by single view 
-    final_trans, final_score = point_to_plane_icp(sample, top, 0.01, transformation, 100)
+    # final_trans, final_score = point_to_plane_icp(sample, top, 0.01, final_trans, 30)
+    final_trans, final_score = point_to_point_icp(sample, top, 0.005, final_trans, 60)
 
     end_time = time.time()
     elapsed_time = end_time - start_time
@@ -364,7 +374,7 @@ def combine_matching(rotate_angle_x: list, rotate_angle_y: list):
     sample.transform(final_trans)
 
     # Visualize matching result
-    o3d.visualization.draw_geometries([top,sample])
+    # o3d.visualization.draw_geometries([scene,sample])
 
     # Calculate ZYZ euler angle of transformation
     theta1,theta2,theta3 = rot_to_zyz(np.asarray(final_trans)) # degree
@@ -373,3 +383,6 @@ def combine_matching(rotate_angle_x: list, rotate_angle_y: list):
     [x_trans, y_trans, z_trans] = [final_trans[0][3]*1000, final_trans[1][3]*1000, final_trans[2][3]*1000] # milimeter
     
     return theta1, theta2, theta3, x_trans, y_trans, z_trans, final_trans[:3,:3] 
+
+
+# combine_matching([40],[40])

@@ -8,12 +8,12 @@ import pyrealsense2 as rs
 import open3d as o3d
 import random
 
-from utils import *
+from Aruco_Detect import *
 from math import sin,cos,atan2
 from numpy.linalg import inv
 from bin_picking.srv import *
 from RegistrationPC import *
-from Scan_init_single_cam import *
+from Robot_Setup import *
 # from verify_point.RegistrationPC import combine_matching
 np.set_printoptions(precision=3, suppress=True)
 
@@ -41,9 +41,9 @@ parts = line.split('\t')
 P_B_O = []
 for part in parts:
     P_B_O.append(float(part))
-P_B_O[2] -= Z_T_E
 file.close()
 
+## Normalize Functions
 def normalize_angle(angle):
     while angle <= -180:
         angle += 360
@@ -55,10 +55,6 @@ def limit(angle):
     if angle < 0:
         angle += 180
     return angle
-
-def rotation_error():
-    
-    pass 
 
 
 ## Declare main class

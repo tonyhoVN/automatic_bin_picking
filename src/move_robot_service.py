@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import rospy
 from bin_picking.srv import *
-from Scan_init_single_cam import *
+from Robot_Setup import *
 
 # sys.dont_write_bytecode = True
 # sys.path.append(os.path.abspath(os.path.dirname(__file__)))
@@ -107,16 +107,72 @@ class Move_Robot():
         '''
         if req.axis == 0:
             rospy.loginfo("Scan in x axis")
-            rot_cam_x(radius= req.radius, angle=req.angle, action=req.action)
+            self.rot_cam_x(radius= req.radius, angle=req.angle, action=req.action)
         if req.axis == 1:
             rospy.loginfo("Scan in y axis")
-            rot_cam_y(radius= req.radius, angle=req.angle, action=req.action)
+            self.rot_cam_y(radius= req.radius, angle=req.angle, action=req.action)
 
         return RotateMultipleViewResponse()
     
     def go_home(self):
         movel(HOMEX)
 
+    def rot_cam_y(self, radius: float, angle: float, action : int):
+        '''
+        Rotate camera 30 degree in y axis
+        '''
+        alpha = radians(angle)
+
+        H_C1_C2_Y = np.array([[cos(alpha), 0, sin(alpha), -radius*sin(alpha)],
+                            [0, 1, 0, 0],
+                            [-sin(alpha), 0, cos(alpha), radius-radius*cos(alpha)],
+                            [0, 0, 0, 1]]) ## rotate camera around y-axis wrt to camera (angle)
+
+        ## Transformation of tool frames when rotate around y_axis of camera frame
+        H_T1_T2_Y = np.matmul(H_T_C, np.matmul(H_C1_C2_Y, H_C_T)) 
+        H_T2_T1_Y = inv(H_T1_T2_Y)
+
+        if action == 0:
+            theta1, theta2, theta3 = rot_to_zyz(H_T1_T2_Y)
+            print(theta1, theta2, theta3)
+            # delta1 = [H_T1_T2_Y[0][3], H_T1_T2_Y[1][3], H_T1_T2_Y[2][3], theta1,angle,theta3]
+            delta1 = [H_T1_T2_Y[0][3], H_T1_T2_Y[1][3], H_T1_T2_Y[2][3], theta1, theta2, theta3]
+            movel(delta1, mod=DR_MV_MOD_REL, ref=DR_TOOL)
+        
+        if action == 1:
+            theta1, theta2, theta3 = rot_to_zyz(H_T2_T1_Y)
+            print(theta1, theta2, theta3)
+            # delta2 = [H_T2_T1_Y[0][3], H_T2_T1_Y[1][3], H_T2_T1_Y[2][3], theta1,-angle,theta3]
+            delta2 = [H_T2_T1_Y[0][3], H_T2_T1_Y[1][3], H_T2_T1_Y[2][3], theta1, theta2, theta3]
+            movel(delta2, mod=DR_MV_MOD_REL, ref=DR_TOOL)
+
+    def rot_cam_x(self, radius: float, angle: float, action : int):
+        '''
+        Rotate camera 30 degree in x axis
+        '''
+        alpha = radians(angle)
+        H_C1_C2_X = np.array([[1, 0, 0, 0],
+                            [0, cos(alpha), -sin(alpha), radius*sin(alpha)],
+                            [0, sin(alpha), cos(alpha), radius - radius*cos(alpha)],
+                            [0, 0, 0, 1]]) ## rotate camera around x-axis wrt to camera (-angle)
+
+        ## Transformation of tool frame when rotate around x_axis of camera frame
+        H_T1_T2_X = np.matmul(H_T_C, np.matmul(H_C1_C2_X, H_C_T))
+        H_T2_T1_X = inv(H_T1_T2_X)
+
+        if action == 0:
+            theta1, theta2, theta3 = rot_to_zyz(H_T1_T2_X)
+            print(theta1,theta2,theta3)
+            # delta1 = [H_T1_T2_X[0][3], H_T1_T2_X[1][3], H_T1_T2_X[2][3], theta1, angle, theta3]
+            delta1 = [H_T1_T2_X[0][3], H_T1_T2_X[1][3], H_T1_T2_X[2][3], theta1, theta2, theta3]
+            movel(delta1, mod=DR_MV_MOD_REL, ref=DR_TOOL)
+
+        if action == 1:
+            theta1, theta2, theta3 = rot_to_zyz(H_T2_T1_X)
+            print(theta1,theta2,theta3)
+            # delta2 = [H_T2_T1_X[0][3], H_T2_T1_X[1][3], H_T2_T1_X[2][3], theta1, angle, theta3] 
+            delta2 = [H_T2_T1_X[0][3], H_T2_T1_X[1][3], H_T2_T1_X[2][3], theta1, theta2, theta3] 
+            movel(delta2, mod=DR_MV_MOD_REL, ref=DR_TOOL)
 
 
 ### MAIN ####
