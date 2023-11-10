@@ -505,21 +505,6 @@ class Robot_Scan():
             trans = transformation_matrix[:3,3]
             theta1, theta2, theta3 = rot_to_zyz(transformation_matrix)
             movel([trans[0], trans[1], trans[2], theta1, theta2, theta3], mod=DR_MV_MOD_ABS)
-        # public_tf("normal",[transformation_matrix], [base_frame], ["desire_tool"])
-        # movel([trans[0], trans[1], trans[2]+ Z_T_E, 0, 180, 0], mod=DR_MV_MOD_ABS)
-        
-        # print("Error_x %.2f" % (self.object_xyz[0] - trans[0]))
-        # print("Error_y %.2f" % (self.object_xyz[1] - trans[1]))
-        # print("Error_z %.2f" % (self.object_xyz[2] - trans[2]))
-        # movel([self.object_xyz[0], self.object_xyz[1], self.object_xyz[2]+2, 0, 180, 0])
-        # movel(HOMEX)
-        # H = np.eye(4)
-        # H[:3,3] = trans
-        # H[:3,:3] = np.matmul(np.matmul(R.from_euler('z', theta1, degrees=True).as_matrix(), 
-        #                                 R.from_euler('y', theta2, degrees=True).as_matrix()), 
-        #                                 R.from_euler('z', theta3, degrees=True).as_matrix())
-        # public_tf("normal",[H], [base_frame], ["desire_tool"])
-        # print(H)
             movel(HOMEX)
             rospy.sleep(1)
 
