@@ -1,16 +1,11 @@
 #!/usr/bin/env python3
 import rospy
-import os,time
-import sys
 import cv2 as cv
-import numpy as np
 import pyrealsense2 as rs
 import open3d as o3d
 import random
 
 from Aruco_Detect import *
-from math import sin,cos,atan2
-from numpy.linalg import inv
 from bin_picking.srv import *
 from RegistrationPC import *
 from Robot_Setup import *
@@ -69,7 +64,7 @@ class Robot_Scan():
         self.move_robot_client   = rospy.ServiceProxy("move_robot_service", MoveMultipleView)
         self.rotate_robot_client = rospy.ServiceProxy("rotate_camera_service", RotateMultipleView)
 
-        self.tf_sub              = rospy.Subscriber('/dsr01m1013/joint_states', JointState, self.callback_TF)
+        self.tf_sub              = rospy.Subscriber('/tf', TFMessage, self.callback_TF)
         self.tf_buffer           = tf2_ros.Buffer()
         self.tf_listener         = tf2_ros.TransformListener(self.tf_buffer)
 
@@ -451,7 +446,7 @@ class Robot_Scan():
         print("Translation Error: %.2f mm" % error_tran_avg)
         print("Rotation Error: %.2f deg" % error_rot_avg)
 
-    def callback_TF(self, msg: JointState):
+    def callback_TF(self, msg: TFMessage):
         # Update HT from base to tool 
         # pos,_ = get_current_posx()
         # H_B_T[:3,3] = pos[:3]
