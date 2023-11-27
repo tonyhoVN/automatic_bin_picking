@@ -174,7 +174,6 @@ if __name__ == "__main__":
             ''' 
             Press r to capture the (320, 240)
             '''
-
             u = 320; v = 240
             depth_value = depth_frame.get_distance(u, v)
             if depth_value == 0: 

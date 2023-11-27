@@ -3,26 +3,26 @@ import rospy
 import cv2 as cv
 import pyrealsense2 as rs
 import open3d as o3d
-import random
-
-from bin_picking.srv import *
-from RegistrationPC import *
-from Robot_Setup import *
-
-# from verify_point.RegistrationPC import combine_matching
-np.set_printoptions(precision=3, suppress=True)
+import os, sys
+import copy
 
 sys.dont_write_bytecode = True
 dir = os.path.dirname(__file__)
-sys.path.append(os.path.abspath(dir))
-path = os.path.abspath(os.path.join(dir,"../result"))
-sys.path.append(path)
+sys.path.append(os.path.abspath(os.path.join(dir,"../")))
+
+from move_robot_service import *
+from detect_cnn.detect import *
+from RegistrationPC import *
+
+# from verify_point.RegistrationPC import combine_matching
+np.set_printoptions(precision=3, suppress=True)
 
 ## Load the corner of bin 
 X_CONNER = []
 Y_CONNER = []
 
 def load_bin_corner():
+    path = os.path.abspath(os.path.join(dir,"../result"))
     file = open(path + '/bin_corner.txt', 'r')
     lines = file.readlines()
     for line in lines:
@@ -39,9 +39,6 @@ class Robot_Scan():
         rospy.init_node("robot_san_matching")
         rospy.on_shutdown(self.shutdown)
         self.pub_stop            = rospy.Publisher('/'+ROBOT_ID +ROBOT_MODEL+'/stop', RobotStop, queue_size=10)
-        self.move_robot_client   = rospy.ServiceProxy("move_robot_service", MoveMultipleView)
-        self.rotate_robot_client = rospy.ServiceProxy("rotate_camera_service", RotateMultipleView)
-
         self.tf_sub              = rospy.Subscriber('/tf', TFMessage, self.callback_TF)
         self.tf_buffer           = tf2_ros.Buffer()
         self.tf_listener         = tf2_ros.TransformListener(self.tf_buffer)
@@ -71,6 +68,11 @@ class Robot_Scan():
         self.color_image = None
         self.depth_image = None 
         self.depth_image_color = None
+        self.bin_image = None
+        self.detect_img = None
+        self.color_roi = None
+        self.target_object_center = None
+        self.reset = True
 
         # Setup hole filling filter 
         self.hole_filling_filter = rs.hole_filling_filter(0)
@@ -80,9 +82,10 @@ class Robot_Scan():
         self.rotate_angle = 40 # scan angle (degree)
         self.angle_x = [self.rotate_angle]            
         self.angle_y = [self.rotate_angle]
-        self.ROI = 300 # size of ROI (pixel * pixel)
+        self.ROI = 150 # size of ROI (pixel * pixel)
 
         # Main loop
+        time.sleep(0.5)
         self.main_loop()
 
     def main_loop(self):
@@ -90,23 +93,34 @@ class Robot_Scan():
         while not rospy.is_shutdown() :
             # Record frame
             self.record_frame()
+
+            # Detect object 
+            self.detect_img, self.target_object_center = detect_result(self.bin_color_image, self.bin_depth_image, model)
             
             # Show images
-            cv.namedWindow('Color', cv.WINDOW_AUTOSIZE)
-            cv.imshow('Color', self.color_image)
             cv.namedWindow('Depth', cv.WINDOW_AUTOSIZE)
             cv.imshow('Depth', self.depth_image_color)
+            cv.namedWindow('Color', cv.WINDOW_AUTOSIZE)
+            cv.imshow('Color', self.detect_img)
 
             # Click on color image
-            cv.setMouseCallback('Color', self.click_handle)
+            # cv.setMouseCallback('Color', self.click_handle)
+
+            # Process
+            self.picking_process()
 
             # Shutdown 
             key = cv.waitKey(30) & 0xFF
+            
+            # Shutdown 
             if key == 27:
                 cv.destroyAllWindows()
                 self.pipeline.stop()
-
                 break
+            
+            # Reset the bin
+            if chr(key) == 'r': 
+                self.reset = False
 
         # Shutdown 
         rospy.signal_shutdown("Shutting down ROS")
@@ -131,68 +145,20 @@ class Robot_Scan():
         # Record color frame 
         self.color_image = np.asanyarray(self.color_frame.get_data())
         self.color_image = cv.cvtColor(self.color_image, cv.COLOR_RGB2BGR)
-        
-        # Draw corner of bin 
-        cv.rectangle(self.color_image, (X_CONNER[0], Y_CONNER[0]),
-                     (X_CONNER[3], Y_CONNER[3]), (0,255,0), 4)
-
+    
         # Record depth frame 
         self.depth_frame = rs.depth_frame(self.hole_filling_filter.process(self.depth_frame)) # apply hole filter     
         self.depth_image = np.asanyarray(self.depth_frame.get_data())
         self.depth_image_color = cv.applyColorMap(cv.convertScaleAbs(self.depth_image, alpha=0.2), cv.COLORMAP_JET) # convert to depth map
         
+        # Draw corner of bin 
+        self.bin_color_image = copy.deepcopy(self.color_image[Y_CONNER[0]:Y_CONNER[3], X_CONNER[0]:X_CONNER[3]])
+        self.bin_depth_image = copy.deepcopy(self.depth_image[Y_CONNER[0]:Y_CONNER[3], X_CONNER[0]:X_CONNER[3]])
+        cv.rectangle(self.color_image, (X_CONNER[0], Y_CONNER[0]),
+                     (X_CONNER[3], Y_CONNER[3]), (0,255,0), 4)
+        
         # Get the intrinsics of the color and depth cameras
         self.depth_intrinsics = self.depth_frame.profile.as_video_stream_profile().intrinsics    
-
-    def click_handle(self,event, x_click, y_click, flags, param):
-        if event == cv.EVENT_LBUTTONDOWN:
-            
-            # Simulation of 5 clicks with a deviation of 10 pixels  
-        
-            x = x_click 
-            y = y_click 
-            # x = x_click 
-            # y = y_click 
-            # Get the position of object 
-            depth_value = self.depth_frame.get_distance(x, y) 
-            location = rs.rs2_deproject_pixel_to_point(self.depth_intrinsics, [x, y], depth_value) # meter
-            obj_location = [m*1000 for m in location] # milimeter 
-
-            # return if the measurement fails 
-            if obj_location == [0., 0., 0.] or (not obj_location): 
-                rospy.loginfo("Cannot detect object")
-                return
-
-            # Step0: Move robot right above click point on object
-            if rospy.wait_for_service("move_robot_service",2): return
-            move_client = MoveMultipleViewRequest(point = obj_location, radius = self.radius)
-            move_client.action = 0
-            self.move_robot_client(move_client)
-            
-            # Step1: scan in the top view and Update the TF from base to scene 
-            self.save_data(0, update_aruco=False) # Record point cloud from top view 
-            H_C_S = np.eye(4)
-            H_C_S[:3,3] = [0, 0, self.radius]
-            H_B_C = self.get_tf(base_frame, camera_frame)
-            global H_B_S, H_B_O
-            H_B_S = np.matmul(H_B_C,H_C_S) 
-
-            # Step2: scan around x axis 
-            for i in range(len(self.angle_x)):
-                if rospy.wait_for_service("rotate_camera_service", 2): return
-                self.rotate_robot_client(axis = 0, radius = self.radius, angle = self.angle_x[i], action = 0)
-                self.save_data("x_" + str(i), update_aruco=False)
-                self.rotate_robot_client(axis = 0, radius = self.radius, angle = self.angle_x[i], action = 1)
-
-            # Step3: scan around y axis 
-            for i in range(len(self.angle_y)):
-                if rospy.wait_for_service("rotate_camera_service", 2): return
-                self.rotate_robot_client(axis = 1, radius = self.radius, angle = self.angle_y[i], action = 0)
-                self.save_data("y_" + str(i), update_aruco=False)
-                self.rotate_robot_client(axis = 1, radius = self.radius, angle = self.angle_y[i], action = 1)
-
-            # Step4: Matching process --> pose estimation
-        
 
     def record_point_cloud(self, ROI: int):
 
@@ -206,8 +172,8 @@ class Robot_Scan():
         # Take the color and depth ROI
         roi_x = int(x_mid - ROI/2)
         roi_y = int(y_mid - ROI/2)
-        color_roi = self.color_image[roi_y:roi_y + ROI, roi_x:roi_x + ROI] # normalize [0,1]
-        color_roi = cv.cvtColor(color_roi, cv.COLOR_RGB2BGR)
+        self.color_roi = self.color_image[roi_y:roi_y + ROI, roi_x:roi_x + ROI] # normalize [0,1]
+        color_roi = cv.cvtColor(self.color_roi, cv.COLOR_RGB2BGR)
         depth_roi = self.depth_image[roi_y:roi_y + ROI, roi_x:roi_x + ROI]
         
         # Convert ROI to pc 
@@ -246,38 +212,88 @@ class Robot_Scan():
         o3d.io.write_point_cloud(path_pc + "/pcl_view_" + str(index) + ".pcd", self.pc_record, True) 
 
         # Save image 
-        cv.imwrite(path_img + "/image_view_" + str(index) + ".jpg", self.color_image)
+        cv.imwrite(path_img + "/image_view_" + str(index) + ".jpg", self.color_roi)
         cv.imwrite(path_img + "/image_depth_" + str(index) + ".png", self.depth_image_color)
 
+    def click_handle(self,event, x_click, y_click, flags, param):
+        if event == cv.EVENT_LBUTTONDOWN:
+            self.reset = False
+            
+    def picking_process(self):
+        # Check if there is no object inside bin or or bin is reseted 
+        if self.target_object_center == None or self.reset:
+            self.reset = True
+            return
 
-    def calculate_error(self, theta1, theta2, theta3, x_trans, y_trans, z_trans, error_mat):
-        error_mat = self.get_tf(reference_frame, target_object_frame)
-        # error_trans = sqrt(error_mat[0,3]**2 + error_mat[1,3]**2 + error_mat[3,3]**2)
-        error_trans = sqrt(error_mat[0,3]**2 + error_mat[1,3]**2 + error_mat[2,3]**2)
-        error_rot = degrees(np.arccos((np.trace(error_mat[:3,:3])-1)/2))
+        # Pixel location of target object
+        x = X_CONNER[0] + self.target_object_center[0]
+        y = Y_CONNER[0] + self.target_object_center[1]
 
-        if error_rot > 90:
-            error_rot -= 180 
+        depth_value = self.depth_frame.get_distance(x, y) 
+        location = rs.rs2_deproject_pixel_to_point(self.depth_intrinsics, [x, y], depth_value) # meter
+        obj_location = [m*1000 for m in location] # milimeter 
 
-        print("Translation error: %.2f" %(error_trans))
-        print("Rotation error: %.2f" %(error_rot))
-        return error_trans, abs(error_rot)
-    
-    def calculate_average_error(self, error_tran, error_rot):
-        error_tran_avg = np.average(np.array(error_tran))
-        error_rot_avg = np.average(np.array(error_rot))
-        print("Success detect: %d/10" % len(error_rot))
-        print("Translation Error: %.2f mm" % error_tran_avg)
-        print("Rotation Error: %.2f deg" % error_rot_avg)
+        # return if the measurement fails 
+        if obj_location == [0., 0., 0.] or (not obj_location): 
+            rospy.loginfo("Cannot detect object")
+            return
+
+        # Step0: Move robot right above click point on object
+        move_to_scan_position(point=obj_location, radius=self.radius)
+        
+        # Step1: scan in the top view and Update the TF from base to scene 
+        self.save_data(0, update_aruco=False) # Record point cloud from top view 
+        H_C_S = np.eye(4)
+        H_C_S[:3,3] = [0, 0, self.radius]
+        H_B_C = self.get_tf(base_frame, camera_frame)
+        global H_B_S, H_B_O
+        H_B_S = np.matmul(H_B_C,H_C_S) 
+
+        # Step2: Scan in x direction 
+        if self.target_object_center[0] < int((X_CONNER[3]-X_CONNER[0])/2):
+            self.angle_y = [-self.rotate_angle]
+        else:
+            self.angle_y = [self.rotate_angle]
+        
+        if self.target_object_center[1] > int((Y_CONNER[3]-Y_CONNER[0])/2):
+            self.angle_x = [-self.rotate_angle]
+        else: 
+            self.angle_x = [self.rotate_angle]
+
+        for i in range(len(self.angle_x)):
+            rot_cam_x(self.radius, self.angle_x[i], 0)
+            self.save_data("x_" + str(i), update_aruco=False)
+            rot_cam_x(self.radius, self.angle_x[i], 1)
+
+        # Step3: Scan in y direction 
+        for i in range(len(self.angle_y)):
+            rot_cam_y(self.radius, self.angle_y[i], 0)
+            self.save_data("y_" + str(i), update_aruco=False)
+            rot_cam_y(self.radius, self.angle_y[i], 1)
+
+        # Step4: Pose estimation and publish the TF from base to object
+        theta1, theta2, theta3, x_trans, y_trans, z_trans, rot_mat = combine_matching(rotate_angle_x = self.angle_x, rotate_angle_y = self.angle_y)
+        H_S_O[:3,3] = [x_trans, y_trans, z_trans]
+        H_S_O[:3,:3] = rot_mat
+        H_B_O = np.matmul(H_B_S, H_S_O)
+        public_tf("normal", [H_B_O], [base_frame], [target_object_frame])
+
+        # # Skip if theta2 is too large:
+        # print(theta2)
+        # if abs(theta2) > 30:
+        #     return
+
+        # Step5: Pick and place
+        H_B_T_desire = np.matmul(H_B_O, H_E_T)
+        public_tf("normal", [H_B_T_desire], [base_frame], ["desire_tool_pose"])
+        H_T_T_desire = self.get_tf(tool_frame, "desire_tool_pose") # TF from current tool to desired tool pose
+        pick_and_place(H_B_T_desire)
 
     def callback_TF(self, msg: TFMessage):
         # Publish static transformation
-        public_tf("normal", [H_T_C, H_T_E, H_B_S, H_B_R], 
-                            [tool_frame, tool_frame, base_frame, base_frame], 
-                            [camera_frame, end_tool_frame, scene_frame, reference_frame])
-
-        # Find tranformation
-        pass
+        public_tf("normal", [H_T_C, H_T_E, H_B_S], 
+                            [tool_frame, tool_frame, base_frame], 
+                            [camera_frame, end_tool_frame, scene_frame])
 
 
     def get_tf(self, frame1: str, frame2: str):
