@@ -12,6 +12,6 @@
     <node name="multi_scan_service" pkg="multi_scan_pose_estimation" type="move_robot_service.py" output="screen"/>
     
     <!-- Execute algorithm and compare with others-->
-    <node name="robot_san_matching" pkg="multi_scan_pose_estimation" type="compare_result.py" output="screen"/>
+    <node name="robot_san_matching" pkg="auto_bin_picking" type="bin_picking_platform.py" output="screen"/>
 
 </launch>

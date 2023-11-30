@@ -1,12 +1,10 @@
 <package format="2">
-<name>multi_scan_pose_estimation</name>
+<name>auto_bin_picking</name>
 <version>0.0.0</version>
-<description>multi-scan pose estimation</description>
+<description>bin picking</description>
 <maintainer email="hoanhtung2000nd@gmail.com">Tony Ho</maintainer>
 <license>TODO</license>
 <buildtool_depend>catkin</buildtool_depend>
-<build_depend>message_generation</build_depend>
-<exec_depend>message_runtime</exec_depend>
 <export>
 <!--  Other tools can request additional information be placed here  -->
 </export>

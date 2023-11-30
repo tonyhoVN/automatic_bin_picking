@@ -19,13 +19,12 @@ def move_to_scan_position(point: list, radius: float):
     rospy.loginfo("Come to object, start scanning")
     # Move to position above box
     # target1 = [point_object_cam[0], point_object_cam[1], (1/3)*float(point_object_cam[2]), 0, 0, 0]
-    print(point_object_cam[0], point_object_cam[1])
     target1 = [point_object_cam[0], point_object_cam[1], point_object_cam[2] - radius, 0.0, 0.0, 0.0]
     movel(target1, mod=DR_MV_MOD_REL, ref=DR_TOOL)
 
 def pick_and_place(H_B_T_desire):
     '''
-    Pick and Place process 
+    Pick and Place process (mm)
     Pick: REL mode 
     Place: ABS mode
     '''
@@ -37,7 +36,7 @@ def pick_and_place(H_B_T_desire):
 
     # Move to target object
     movel([tran_x,tran_y,current_pose[2],rot_z1, rot_y, rot_z2]) # move x,y direction and rotate
-    movel([tran_x,tran_y,tran_z,rot_z1, rot_y, rot_z2]) # move z direction
+    movel([tran_x,tran_y,tran_z-5,rot_z1, rot_y, rot_z2]) # move z direction
     # movel([0,0,tran_z,0,0,0], mod=DR_MV_MOD_REL, ref=DR_TOOL)
 
     # Close gripper

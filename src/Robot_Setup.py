@@ -20,8 +20,8 @@ DR_init.__dsr__model = ROBOT_MODEL
 from DSR_ROBOT import *
 
 # Global setup
-set_velx(150)  # set global task speed: 30(mm/sec), 20(deg/sec)
-set_accx(300)  # set global task accel: 60(mm/sec^2), 40(deg/sec^2)
+set_velx(200)  # set global task speed: 30(mm/sec), 20(deg/sec)
+set_accx(400)  # set global task accel: 60(mm/sec^2), 40(deg/sec^2)
 set_velj(30)  # set global joint speed: 10 deg/s
 set_accj(60)  # set global joint accel: 20 deg/s^2
 set_robot_mode(0) # set control mode to manual 
@@ -46,12 +46,12 @@ Z_T_E = 170 #mm - distans from ee to tool
 
 H_T_C = np.array([[1, 0, 0, -35.2988],  #34.07
                   [0, 1, 0, -60.3], #52.7
-                  [0, 0, 1, 95], #28
+                  [0, 0, 1, 90], #28
                   [0, 0, 0, 1]]) ## transformation matrix from tool to cam coordinate (mm)
 
 H_C_T = np.array([[1, 0, 0, 35.2988],
                   [0, 1, 0, 60.3],
-                  [0, 0, 1, -95],
+                  [0, 0, 1, -90],
                   [0, 0, 0, 1]]) ## transformation matrix from cam to tool coordinate (mm)
 
 

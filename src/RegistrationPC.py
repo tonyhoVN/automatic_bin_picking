@@ -19,6 +19,11 @@ def rot_to_zyz(matrix):
     theta3, theta2, theta1 = r.as_euler('zyz', degrees=True)
     return theta1, theta2, theta3
 
+##### Load the sample 
+voxel_size = 0.001 # 0.004
+
+
+### Process functions 
 
 def point_to_point_color(source, target, threshold, trans_init, iteration: int = 30):
     # Estimate Normal 
@@ -47,8 +52,8 @@ def point_to_point_icp(source, target, threshold, trans_init, iteration: int = 6
 
 def point_to_plane_icp(source, target, threshold, trans_init, iteration: int = 60):
     loss = o3d.pipelines.registration.TukeyLoss(k=1.0)
-    source.estimate_normals(search_param = o3d.geometry.KDTreeSearchParamHybrid(radius = 0.003, max_nn = 5))
-    target.estimate_normals(search_param = o3d.geometry.KDTreeSearchParamHybrid(radius = 0.003, max_nn = 5))
+    source.estimate_normals(search_param = o3d.geometry.KDTreeSearchParamHybrid(radius = 0.002, max_nn = 5))
+    target.estimate_normals(search_param = o3d.geometry.KDTreeSearchParamHybrid(radius = 0.002, max_nn = 5))
     reg_p2p = o3d.pipelines.registration.registration_icp(
         source, target, threshold, trans_init,
         o3d.pipelines.registration.TransformationEstimationPointToPlane(loss),
@@ -57,16 +62,16 @@ def point_to_plane_icp(source, target, threshold, trans_init, iteration: int = 6
 
 
 def fast_global_registration(source,target):
-    source.estimate_normals(search_param = o3d.geometry.KDTreeSearchParamHybrid(radius = voxel_size*3, max_nn = 30))
-    target.estimate_normals(search_param = o3d.geometry.KDTreeSearchParamHybrid(radius = 0.003*3, max_nn = 30))  
+    source.estimate_normals(search_param = o3d.geometry.KDTreeSearchParamHybrid(radius = voxel_size*2, max_nn = 5))
+    target.estimate_normals(search_param = o3d.geometry.KDTreeSearchParamHybrid(radius = voxel_size*2, max_nn = 5))  
     
     ## Find FPFH
     source_fpfh = o3d.pipelines.registration.compute_fpfh_feature(
                     source,
-                    o3d.geometry.KDTreeSearchParamHybrid(radius=voxel_size*5, max_nn=100))
+                    o3d.geometry.KDTreeSearchParamHybrid(radius=voxel_size*3, max_nn=20))
     target_fpfh = o3d.pipelines.registration.compute_fpfh_feature(
                     target,
-                    o3d.geometry.KDTreeSearchParamHybrid(radius=0.003*5, max_nn=100))
+                    o3d.geometry.KDTreeSearchParamHybrid(radius=voxel_size*3, max_nn=20))
     
     # Fast global localization 
     result = o3d.pipelines.registration.registration_fast_based_on_feature_matching(
@@ -179,7 +184,7 @@ def global_matching(source, target):
     best_score = 999
     best_fitness = 0
     transformation = np.eye(4)
-    for z_angle in range(-90,90,10):
+    for z_angle in range(-50,50,10):
         for y_angle in range(-0,10,10):
             rot = R.from_euler('y', y_angle, degrees=True)*R.from_euler('z', z_angle, degrees=True)    
             trans_init = np.eye(4)
@@ -196,7 +201,7 @@ def global_matching(source, target):
 def reconstruct_scene(rot_x_list:list = [], rot_y_list:list = []):
     # Load the target 
     target  = o3d.io.read_point_cloud(path + "/" + "pcl_view_0.pcd")
-    target = pre_process(target, np.eye(4), 0.002, False)
+    target = pre_process(target, np.eye(4), voxel_size, False)
 
     # Stitching diff views top construct scene 
     scene = copy.deepcopy(target)
@@ -211,10 +216,11 @@ def reconstruct_scene(rot_x_list:list = [], rot_y_list:list = []):
         init_guess[:3,:3] = rot.as_matrix()
 
         # Preprocess
-        source = pre_process(source, init_guess, 0.002, False)
+        source = pre_process(source, init_guess, voxel_size, False)
 
         # Matching 
-        transform_mat,_,_ = point_to_point_icp(source, target, 0.003, np.eye(4))
+        transform_mat = np.eye(4)
+        # transform_mat,_,_ = point_to_point_icp(source, target, voxel_size, np.eye(4))
 
         # Add to scene
         scene += source.transform(transform_mat)
@@ -229,27 +235,27 @@ def reconstruct_scene(rot_x_list:list = [], rot_y_list:list = []):
         init_guess[:3,:3] = rot.as_matrix()
 
         # Preprocess
-        source = pre_process(source, init_guess, 0.002, False)
+        source = pre_process(source, init_guess, voxel_size, False)
 
         # Matching 
-        transform_mat,_,_ = point_to_point_icp(source, target, 0.003, np.eye(4))
+        transform_mat = np.eye(4)
+        # transform_mat,_,_ = point_to_point_icp(source, target, voxel_size, np.eye(4))
 
         # Add to scene
         scene += source.transform(transform_mat)
         
     
     # Post process 
-    scene = post_process(scene, voxel_size, True)
+    scene = post_process(scene, voxel_size*2, True)
     return scene
 
 
-
-##### Load the sample 
-voxel_size = 0.002 # 0.004
+##### Load the sample
 Sample = o3d.io.read_point_cloud(path + "/" + "object.pcd")
 Sample = pre_transform_mesh(Sample)
-Sample = Sample.voxel_down_sample(0.002) #0.005
+Sample = Sample.voxel_down_sample(voxel_size) #0.005
 Sample.paint_uniform_color([0,0,0.5])
+
 ###### Matching function
 def multi_view_matching(rotate_angle_x: list, rotate_angle_y: list):
     # Reconstruct scene 
@@ -361,11 +367,12 @@ def combine_matching(rotate_angle_x: list, rotate_angle_y: list):
     # Global matching
     transformation,_ = global_matching(source = sample, target = scene)
     # transformation,_ = fast_global_registration(source = sample, target = scene)
-    final_trans,rmsq,fitness = transformation,999,0
+    # final_trans,rmsq,fitness = transformation,999,0
 
 
-     # Refine by single view 
-    final_trans,rmsq,fitness = point_to_point_icp(sample, top, 0.005, final_trans, 60)
+    # Refine by single view
+    transformation,_,_ = point_to_point_icp(sample, scene, 0.003, transformation, 30)
+    final_trans,_,_ = point_to_point_icp(sample, top, 0.003, transformation, 30)
 
     # print(final_trans)
 
@@ -378,11 +385,13 @@ def combine_matching(rotate_angle_x: list, rotate_angle_y: list):
     # Calculate ZYZ euler angle of transformation
     theta1,theta2,theta3 = rot_to_zyz(np.asarray(final_trans)) # degree
     final_rot = R.from_euler('zyz',[theta1,0,theta3],degrees=True).as_matrix()
+    # print(final_trans[:3,:3])
+    # print(final_rot)
 
     # Calculate XYZ translation of transformation 
     [x_trans, y_trans, z_trans] = [final_trans[0][3]*1000, final_trans[1][3]*1000, final_trans[2][3]*1000] # milimeter
     
 
-    return theta1, theta2, theta3, x_trans, y_trans, z_trans, final_rot 
+    return theta1, theta2, theta3, x_trans, y_trans, z_trans, final_rot #final_trans[:3,:3]
 
 # combine_matching([40],[-40])

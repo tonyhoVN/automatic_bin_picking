@@ -1,6 +1,0 @@
-float32[3] point # position of object 
-float32[3] angle # rotate angle 
-float32    radius # rotate radius 
-int32 action  # action 1: move close to scan
-              # action 2: move close to grasp
----

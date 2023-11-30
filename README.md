@@ -5,7 +5,7 @@ This is multi-scan algorithm for exact pose estimation
 Start the robot first. Then run the algorithm.
 ```bash
 roslaunch dsr_launcher single_robot_rviz.launch mode:=real host:=192.168.2.20
-roslaunch multi_scan_pose_estimation multi_scan.launch
+roslaunch auto_bin_picking bin_picking_platform.py
 ```
 
 ### Calibration hand-eye camera 

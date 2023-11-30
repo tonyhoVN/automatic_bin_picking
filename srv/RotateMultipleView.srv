@@ -1,6 +1,0 @@
-int32 axis # 0: x camera axis, 1: y camera axis
-float32 radius # radius = distance from object to camera (mm)
-float32 angle # angle want to rotate (deg)
-# int32 direction # 0: positive, # 1: negative
-int32 action # 0 : rotate to record pc, 1: comeback 
----

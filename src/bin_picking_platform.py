@@ -68,6 +68,7 @@ class Robot_Scan():
         self.color_image = None
         self.depth_image = None 
         self.depth_image_color = None
+        self.depth_image_filter = None
         self.bin_image = None
         self.detect_img = None
         self.color_roi = None
@@ -99,15 +100,13 @@ class Robot_Scan():
             
             # Show images
             cv.namedWindow('Depth', cv.WINDOW_AUTOSIZE)
-            cv.imshow('Depth', self.depth_image_color)
+            cv.imshow('Depth', self.depth_image_color[Y_CONNER[0]:Y_CONNER[3], X_CONNER[0]:X_CONNER[3]])
+            # cv2.imshow('Depth', self.bin_depth_image)
             cv.namedWindow('Color', cv.WINDOW_AUTOSIZE)
             cv.imshow('Color', self.detect_img)
 
             # Click on color image
             # cv.setMouseCallback('Color', self.click_handle)
-
-            # Process
-            self.picking_process()
 
             # Shutdown 
             key = cv.waitKey(30) & 0xFF
@@ -120,7 +119,11 @@ class Robot_Scan():
             
             # Reset the bin
             if chr(key) == 'r': 
+                print("START BIN PICKING")
                 self.reset = False
+            
+            # Process
+            self.picking_process()
 
         # Shutdown 
         rospy.signal_shutdown("Shutting down ROS")
@@ -147,13 +150,14 @@ class Robot_Scan():
         self.color_image = cv.cvtColor(self.color_image, cv.COLOR_RGB2BGR)
     
         # Record depth frame 
-        self.depth_frame = rs.depth_frame(self.hole_filling_filter.process(self.depth_frame)) # apply hole filter     
+        self.depth_frame_filter = rs.depth_frame(self.hole_filling_filter.process(self.depth_frame)) # apply hole filter     
         self.depth_image = np.asanyarray(self.depth_frame.get_data())
-        self.depth_image_color = cv.applyColorMap(cv.convertScaleAbs(self.depth_image, alpha=0.2), cv.COLORMAP_JET) # convert to depth map
+        self.depth_image_filter = np.asanyarray(self.depth_frame_filter.get_data())
+        self.depth_image_color = cv.applyColorMap(cv.convertScaleAbs(self.depth_image_filter, alpha=0.2), cv.COLORMAP_JET) # convert to depth map
         
         # Draw corner of bin 
         self.bin_color_image = copy.deepcopy(self.color_image[Y_CONNER[0]:Y_CONNER[3], X_CONNER[0]:X_CONNER[3]])
-        self.bin_depth_image = copy.deepcopy(self.depth_image[Y_CONNER[0]:Y_CONNER[3], X_CONNER[0]:X_CONNER[3]])
+        self.bin_depth_image = copy.deepcopy(self.depth_image_filter[Y_CONNER[0]:Y_CONNER[3], X_CONNER[0]:X_CONNER[3]])
         cv.rectangle(self.color_image, (X_CONNER[0], Y_CONNER[0]),
                      (X_CONNER[3], Y_CONNER[3]), (0,255,0), 4)
         
@@ -163,10 +167,6 @@ class Robot_Scan():
     def record_point_cloud(self, ROI: int):
 
         x_mid = int(self.width/2) ; y_mid = int(self.height/2)
-        # get center distance 
-        depth_value_center = self.depth_frame.get_distance(x_mid, y_mid) 
-        location_center = rs.rs2_deproject_pixel_to_point(self.depth_intrinsics, [x_mid, y_mid], depth_value_center) # meter
-
         self.pc_record.clear() # clear point cloud
 
         # Take the color and depth ROI
@@ -221,10 +221,11 @@ class Robot_Scan():
             
     def picking_process(self):
         # Check if there is no object inside bin or or bin is reseted 
+        
         if self.target_object_center == None or self.reset:
             self.reset = True
             return
-
+        
         # Pixel location of target object
         x = X_CONNER[0] + self.target_object_center[0]
         y = Y_CONNER[0] + self.target_object_center[1]
@@ -246,7 +247,7 @@ class Robot_Scan():
         H_C_S = np.eye(4)
         H_C_S[:3,3] = [0, 0, self.radius]
         H_B_C = self.get_tf(base_frame, camera_frame)
-        global H_B_S, H_B_O
+        # global H_B_S, H_B_O
         H_B_S = np.matmul(H_B_C,H_C_S) 
 
         # Step2: Scan in x direction 
@@ -276,17 +277,16 @@ class Robot_Scan():
         H_S_O[:3,3] = [x_trans, y_trans, z_trans]
         H_S_O[:3,:3] = rot_mat
         H_B_O = np.matmul(H_B_S, H_S_O)
-        public_tf("normal", [H_B_O], [base_frame], [target_object_frame])
+        # public_tf("normal", [H_B_O], [base_frame], [target_object_frame])
 
-        # # Skip if theta2 is too large:
-        # print(theta2)
-        # if abs(theta2) > 30:
+        # Skip if theta2 is too large:
+        # if abs(theta2) > 40:
         #     return
 
         # Step5: Pick and place
         H_B_T_desire = np.matmul(H_B_O, H_E_T)
-        public_tf("normal", [H_B_T_desire], [base_frame], ["desire_tool_pose"])
-        H_T_T_desire = self.get_tf(tool_frame, "desire_tool_pose") # TF from current tool to desired tool pose
+        # public_tf("normal", [H_B_T_desire], [base_frame], ["desire_tool_pose"])
+        # H_T_T_desire = self.get_tf(tool_frame, "desire_tool_pose") # TF from current tool to desired tool pose
         pick_and_place(H_B_T_desire)
 
     def callback_TF(self, msg: TFMessage):
