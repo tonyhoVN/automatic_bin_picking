@@ -52,8 +52,8 @@ def point_to_point_icp(source, target, threshold, trans_init, iteration: int = 6
 
 def point_to_plane_icp(source, target, threshold, trans_init, iteration: int = 60):
     loss = o3d.pipelines.registration.TukeyLoss(k=1.0)
-    source.estimate_normals(search_param = o3d.geometry.KDTreeSearchParamHybrid(radius = 0.002, max_nn = 5))
-    target.estimate_normals(search_param = o3d.geometry.KDTreeSearchParamHybrid(radius = 0.002, max_nn = 5))
+    source.estimate_normals(search_param = o3d.geometry.KDTreeSearchParamHybrid(radius = 0.002, max_nn = 10))
+    target.estimate_normals(search_param = o3d.geometry.KDTreeSearchParamHybrid(radius = 0.002, max_nn = 10))
     reg_p2p = o3d.pipelines.registration.registration_icp(
         source, target, threshold, trans_init,
         o3d.pipelines.registration.TransformationEstimationPointToPlane(loss),
@@ -158,13 +158,13 @@ def post_process(source, voxel_size, remove_outlier : bool = True):
     
     # Pass through filter 
     index = []
-    size = 0.03
+    size = 0.025
     for i in range(len(source.points)):
         if source.points[i][0] < size \
             and source.points[i][0] > -size \
             and source.points[i][1] < size \
             and source.points[i][1] > -size \
-            and source.points[i][2] < 0.025: 
+            and source.points[i][2] < 0.02: 
             index.append(i)
     source = source.select_by_index(index)
 
@@ -220,7 +220,7 @@ def reconstruct_scene(rot_x_list:list = [], rot_y_list:list = []):
 
         # Matching 
         transform_mat = np.eye(4)
-        # transform_mat,_,_ = point_to_point_icp(source, target, voxel_size, np.eye(4))
+        transform_mat,_,_ = point_to_point_icp(source, target, voxel_size, np.eye(4))
 
         # Add to scene
         scene += source.transform(transform_mat)
@@ -239,7 +239,7 @@ def reconstruct_scene(rot_x_list:list = [], rot_y_list:list = []):
 
         # Matching 
         transform_mat = np.eye(4)
-        # transform_mat,_,_ = point_to_point_icp(source, target, voxel_size, np.eye(4))
+        transform_mat,_,_ = point_to_point_icp(source, target, voxel_size, np.eye(4))
 
         # Add to scene
         scene += source.transform(transform_mat)
@@ -345,11 +345,12 @@ def single_view_matching(rotate_angle_x: list, rotate_angle_y: list):
 
     # Calculate ZYZ euler angle of transformation
     theta1,theta2,theta3 = rot_to_zyz(np.asarray(transformation)) # degree
+    final_rot = R.from_euler('zyz',[theta1,0,theta3],degrees=True).as_matrix()
 
     # Calculate XYZ translation of transformation 
     [x_trans, y_trans, z_trans] = [transformation[0][3]*1000, transformation[1][3]*1000, transformation[2][3]*1000] # milimeter
     
-    return theta1, theta2, theta3, x_trans, y_trans, z_trans, transformation[:3,:3]
+    return theta1, theta2, theta3, x_trans, y_trans, z_trans, final_rot
 
 
 def combine_matching(rotate_angle_x: list, rotate_angle_y: list):
@@ -394,4 +395,4 @@ def combine_matching(rotate_angle_x: list, rotate_angle_y: list):
 
     return theta1, theta2, theta3, x_trans, y_trans, z_trans, final_rot #final_trans[:3,:3]
 
-# combine_matching([40],[-40])
+# combine_matching([40],[40])

@@ -230,7 +230,7 @@ class Robot_Scan():
         x = X_CONNER[0] + self.target_object_center[0]
         y = Y_CONNER[0] + self.target_object_center[1]
 
-        depth_value = self.depth_frame.get_distance(x, y) 
+        depth_value = self.depth_frame_filter.get_distance(x, y) 
         location = rs.rs2_deproject_pixel_to_point(self.depth_intrinsics, [x, y], depth_value) # meter
         obj_location = [m*1000 for m in location] # milimeter 
 
