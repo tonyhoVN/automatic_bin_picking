@@ -164,7 +164,7 @@ def post_process(source, voxel_size, remove_outlier : bool = True):
             and source.points[i][0] > -size \
             and source.points[i][1] < size \
             and source.points[i][1] > -size \
-            and source.points[i][2] < 0.02: 
+            and source.points[i][2] < 0.05: 
             index.append(i)
     source = source.select_by_index(index)
 
