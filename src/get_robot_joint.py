@@ -11,3 +11,7 @@ DR_init.__dsr__id = ROBOT_ID
 DR_init.__dsr__model = ROBOT_MODEL
 from DSR_ROBOT import *
 
+while True:
+    joint = get_current_posj()
+    print(joint)
+    time.sleep(0.5)
