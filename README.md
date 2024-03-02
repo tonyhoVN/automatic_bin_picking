@@ -1,17 +1,17 @@
 # Autonomous Multi-view Bin-picking System 
 This is comprehensive platform for autonomous bin-picking system. The system used multi-view scan-matching algorithm for acurate 6D pose estimation
-
+[![demo](https://drive.google.com/file/d/1XvkiXS_cX4Qnfp5fu9LuZ5UZiqGllV_1/view?usp=drive_link)](https://drive.google.com/file/d/1XvkiXS_cX4Qnfp5fu9LuZ5UZiqGllV_1/view?usp=drive_link)
 ### Run full bin-picking system 
-Step1: Start the robot first. Then run the platform file.
+-__Step1__: Start the robot first. Then run the platform file.
 ```bash
 roslaunch dsr_launcher single_robot_rviz.launch mode:=real host:=192.168.2.20
 ```
-Step2: Run the platform
+-__Step2__: Run the platform
 ```bash
 rosrun auto_bin_picking bin_picking_platform.py
 ```
-Step3: Arrange object into bin. Make sure bin is aligned inside given ROI. 
-Step4: On the color image, press "r" to start the picking process
+-__Step3__: Arrange object into bin. Make sure bin is aligned inside given ROI.
+-__Step4__: On the color image, press "r" to start the picking process
 
 ### Calibration hand-eye camera 
 Execute following commands to setup robot 
